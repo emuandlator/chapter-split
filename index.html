@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chapter Split — cut a long PDF into chapters</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#E4E9EC;
+    --sheet:#F8FAFB;
+    --ink:#12232F;
+    --ink-2:#5C7383;
+    --rule:#B9C7CE;
+    --blue:#1E4FA3;
+    --blue-soft:#E7EDF8;
+    --cut:#AE3648;
+    --grid:rgba(30,79,163,.07);
+    --shadow:0 1px 0 rgba(18,35,47,.06);
+    --r:3px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background-color:var(--paper);
+    background-image:
+      repeating-linear-gradient(to right, var(--grid) 0 1px, transparent 1px 28px),
+      repeating-linear-gradient(to bottom, var(--grid) 0 1px, transparent 1px 28px);
+    color:var(--ink);
+    font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    font-size:15px;
+    line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1080px;margin:0 auto;padding:40px 24px 96px}
+
+  /* ---- masthead ---- */
+  .masthead{margin-bottom:28px}
+  h1{
+    font-family:"Space Grotesk",sans-serif;
+    font-weight:700;
+    font-size:clamp(30px,5vw,44px);
+    letter-spacing:-.025em;
+    line-height:1.02;
+    margin:0 0 8px;
+  }
+  .lede{margin:0;max-width:56ch;color:var(--ink-2)}
+
+  /* ---- panels ---- */
+  .panel{
+    background:var(--sheet);
+    border:1px solid var(--rule);
+    border-radius:var(--r);
+    box-shadow:var(--shadow);
+  }
+  h2{
+    font-family:"Space Grotesk",sans-serif;
+    font-size:17px;font-weight:500;letter-spacing:-.01em;
+    margin:0 0 2px;
+  }
+  .hint{color:var(--ink-2);font-size:13.5px;margin:0 0 16px;max-width:52ch}
+
+  /* ---- dropzone ---- */
+  .dropzone{
+    border:1.5px dashed var(--rule);
+    border-radius:var(--r);
+    background:rgba(248,250,251,.72);
+    padding:56px 24px;
+    text-align:center;
+    transition:border-color .15s, background .15s;
+  }
+  .dropzone.over{border-color:var(--blue);background:var(--blue-soft);border-style:solid}
+  .dropzone p{margin:0 0 18px;color:var(--ink-2)}
+  .dz-title{
+    font-family:"Space Grotesk",sans-serif;font-size:20px;font-weight:500;
+    color:var(--ink);margin:0 0 6px !important;
+  }
+  .fineprint{font-size:13px;color:var(--ink-2);margin-top:18px !important}
+
+  /* ---- buttons ---- */
+  .btn{
+    font:inherit;font-weight:500;
+    border:1px solid var(--ink);
+    background:var(--sheet);color:var(--ink);
+    padding:9px 18px;border-radius:var(--r);
+    cursor:pointer;
+    transition:background .12s,color .12s,border-color .12s;
+  }
+  .btn:hover{background:var(--ink);color:var(--sheet)}
+  .btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+  .btn.primary:hover{background:#163C7D;border-color:#163C7D}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .btn:disabled:hover{background:var(--sheet);color:var(--ink)}
+  .btn.primary:disabled:hover{background:var(--blue);color:#fff}
+  .btn.small{padding:5px 11px;font-size:13.5px}
+  .linkish{
+    background:none;border:none;padding:0;font:inherit;color:var(--blue);
+    text-decoration:underline;text-underline-offset:2px;cursor:pointer;
+  }
+  :focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+
+  /* ---- document bar ---- */
+  .docbar{
+    display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;
+    padding:14px 18px;border-bottom:1px solid var(--rule);
+  }
+  .docname{font-family:"Space Grotesk",sans-serif;font-weight:500;font-size:16px;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+  .docmeta{color:var(--ink-2);font-size:13.5px}
+  .docbar .linkish{margin-left:auto}
+
+  /* ---- the spine (hero) ---- */
+  .spinebox{padding:26px 18px 12px}
+  .spine{
+    position:relative;height:78px;
+    background:
+      repeating-linear-gradient(to right,rgba(18,35,47,.055) 0 1px,transparent 1px 5px);
+    border:1px solid var(--rule);
+    border-radius:2px;
+    overflow:hidden;
+  }
+  .seg{
+    position:absolute;top:0;bottom:0;
+    border-left:1px solid transparent;
+    transition:background .12s;
+  }
+  .seg.odd{background:rgba(30,79,163,.10)}
+  .seg.even{background:rgba(30,79,163,.19)}
+  .seg.hot{background:var(--cut) !important}
+  .seg.orphan{background:repeating-linear-gradient(45deg,rgba(18,35,47,.10) 0 4px,transparent 4px 8px)}
+  .cut{
+    position:absolute;top:-1px;bottom:-1px;width:2px;
+    background:var(--cut);
+    transform-origin:top center;
+  }
+  .cut::before{
+    content:"";position:absolute;top:0;left:-4px;
+    border-left:5px solid transparent;border-right:5px solid transparent;
+    border-top:7px solid var(--cut);
+  }
+  .drawing .cut{animation:drop .28s cubic-bezier(.2,.7,.3,1) both;animation-delay:var(--d)}
+  @keyframes drop{from{transform:scaleY(0);opacity:0}to{transform:scaleY(1);opacity:1}}
+  @media (prefers-reduced-motion:reduce){.drawing .cut{animation:none}}
+
+  .axis{position:relative;height:22px;margin-top:6px}
+  .tick{position:absolute;top:0;transform:translateX(-50%);
+    font-size:11.5px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+  .tick::before{content:"";position:absolute;left:50%;top:-6px;width:1px;height:4px;background:var(--rule)}
+  .tick.first{transform:none}.tick.first::before{left:0}
+  .tick.last{transform:translateX(-100%)}.tick.last::before{left:auto;right:0}
+  .orphan-note{
+    margin:14px 18px 0;padding:10px 14px;font-size:13.5px;
+    background:var(--blue-soft);border-left:2px solid var(--blue);border-radius:2px;
+  }
+
+  /* ---- work area ---- */
+  .work{display:grid;grid-template-columns:340px 1fr;gap:20px;margin-top:20px;align-items:start}
+  @media (max-width:860px){.work{grid-template-columns:1fr}}
+  .pad{padding:20px}
+
+  fieldset{border:none;margin:0;padding:0}
+  legend{padding:0}
+  .method{
+    display:block;padding:11px 0;border-top:1px solid var(--rule);
+  }
+  .method:first-of-type{border-top:none;padding-top:0}
+  .method > label{display:flex;gap:9px;align-items:baseline;cursor:pointer;font-weight:500}
+  .method input[type=radio]{margin:0;accent-color:var(--blue);flex:none;transform:translateY(1px)}
+  .method .why{display:block;font-weight:400;color:var(--ink-2);font-size:13px;margin-top:1px}
+  .sub{margin:10px 0 2px 24px;display:none}
+  .method.on .sub{display:block}
+  .method.on .sub.row-inline{display:flex}
+  input[type=text],input[type=number],textarea,select{
+    font:inherit;font-size:14px;
+    background:#fff;color:var(--ink);
+    border:1px solid var(--rule);border-radius:2px;
+    padding:6px 8px;width:100%;
+  }
+  textarea{resize:vertical;min-height:96px;line-height:1.5}
+  .sub label{display:block;font-size:13px;color:var(--ink-2);margin-bottom:4px}
+  .row-inline{display:flex;gap:8px;align-items:center}
+  .row-inline input[type=number]{width:82px}
+  .go{margin-top:18px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+
+  .status{font-size:13.5px;color:var(--ink-2);margin:12px 0 0;min-height:1.2em}
+  .status.bad{color:var(--cut)}
+  .meter{height:3px;background:var(--rule);border-radius:2px;overflow:hidden;margin-top:10px}
+  .meter > i{display:block;height:100%;width:0;background:var(--blue);transition:width .15s linear}
+
+  /* ---- chapter list ---- */
+  .listhead{display:flex;align-items:baseline;gap:10px;padding:20px 20px 12px}
+  .listhead .n{color:var(--ink-2);font-size:13.5px;margin-left:auto;font-variant-numeric:tabular-nums}
+  ol.rows{list-style:none;margin:0;padding:0;border-top:1px solid var(--rule)}
+  .rows li{
+    display:grid;grid-template-columns:34px 1fr 132px 30px;
+    gap:10px;align-items:center;
+    padding:8px 20px;border-bottom:1px solid rgba(185,199,206,.55);
+  }
+  .rows li:hover{background:rgba(30,79,163,.045)}
+  .rows li.empty-ch .pages{color:var(--cut)}
+  .rows li.empty-ch .pages input{border-color:var(--cut)}
+  .idx{
+    font-family:"Space Grotesk",sans-serif;font-size:13px;color:var(--ink-2);
+    font-variant-numeric:tabular-nums;text-align:right;
+  }
+  .rows input[type=text]{border-color:transparent;background:transparent;padding:5px 6px}
+  .rows input[type=text]:hover{border-color:var(--rule);background:#fff}
+  .rows input[type=text]:focus{border-color:var(--blue);background:#fff}
+  .pages{display:flex;align-items:center;gap:5px;font-size:13px;color:var(--ink-2);
+    font-variant-numeric:tabular-nums}
+  .pages input{width:62px;text-align:right;padding:4px 6px}
+  .kill{
+    border:none;background:none;color:var(--ink-2);cursor:pointer;
+    font-size:17px;line-height:1;padding:4px 6px;border-radius:2px;
+  }
+  .kill:hover{color:var(--cut);background:rgba(174,54,72,.09)}
+  .empty{padding:34px 20px;text-align:center;color:var(--ink-2);font-size:14px}
+  .listfoot{padding:14px 20px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;
+    border-top:1px solid var(--rule)}
+  .listfoot .btn.primary{margin-left:auto}
+  .numopt{display:flex;gap:7px;align-items:center;font-size:13px;color:var(--ink-2);cursor:pointer}
+  .numopt input{accent-color:var(--blue);margin:0}
+
+  /* ---- results ---- */
+  .results{border-top:1px solid var(--rule);padding:16px 20px 20px}
+  .results h3{font-family:"Space Grotesk",sans-serif;font-size:15px;font-weight:500;margin:0 0 10px}
+  .files{list-style:none;margin:0 0 14px;padding:0;max-height:270px;overflow:auto}
+  .files li{display:flex;gap:12px;align-items:center;padding:5px 0;font-size:13.5px;
+    border-bottom:1px solid rgba(185,199,206,.45)}
+  .files .fname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .files .fsize{margin-left:auto;color:var(--ink-2);font-variant-numeric:tabular-nums;flex:none}
+  .files a{color:var(--blue);flex:none}
+
+  .colophon{margin-top:40px;font-size:13px;color:var(--ink-2);max-width:64ch}
+  .colophon p{margin:0 0 8px}
+  [hidden]{display:none !important}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <h1>Chapter Split</h1>
+    <p class="lede">Cut a long PDF into one file per chapter. The file stays on your computer — nothing is uploaded.</p>
+  </header>
+
+  <section class="panel" id="stage">
+    <div id="dropzone" class="dropzone">
+      <p class="dz-title">Drop a PDF here</p>
+      <p>Books, manuals, scanned reports — a few hundred megabytes is fine.</p>
+      <button class="btn" id="pickBtn" type="button">Choose a file</button>
+      <input type="file" id="fileInput" accept="application/pdf,.pdf" hidden>
+      <p class="fineprint" id="loadNote">Large files take a few seconds to open.</p>
+    </div>
+
+    <div id="loaded" hidden>
+      <div class="docbar">
+        <span class="docname" id="docName"></span>
+        <span class="docmeta" id="docMeta"></span>
+        <button class="linkish" id="resetBtn" type="button">Choose another file</button>
+      </div>
+      <div class="spinebox">
+        <div class="spine" id="spine"></div>
+        <div class="axis" id="axis"></div>
+      </div>
+      <p class="orphan-note" id="orphanNote" hidden></p>
+    </div>
+  </section>
+
+  <section class="work" id="work" hidden>
+
+    <div class="panel pad">
+      <h2>Find the chapters</h2>
+      <p class="hint">Most books carry their own chapter list in their bookmarks. If this one doesn't, look for headings instead.</p>
+
+      <fieldset id="methods">
+        <div class="method on" data-method="outline">
+          <label><input type="radio" name="method" value="outline" checked>
+            <span>Built-in bookmarks<span class="why" id="outlineWhy">Checking…</span></span></label>
+          <div class="sub">
+            <label for="depthSel">Which level counts as a chapter</label>
+            <select id="depthSel">
+              <option value="1">Top level only</option>
+              <option value="2">Top two levels</option>
+              <option value="99">Every level</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="method" data-method="text">
+          <label><input type="radio" name="method" value="text">
+            <span>Headings on the page<span class="why">Reads the top of every page looking for a chapter opening. Slower, and no help on scans without text.</span></span></label>
+          <div class="sub">
+            <label for="patternInput">A chapter starts when the heading begins with</label>
+            <input type="text" id="patternInput" value="chapter|part|book|appendix|prologue|epilogue|introduction" spellcheck="false">
+          </div>
+        </div>
+
+        <div class="method" data-method="fixed">
+          <label><input type="radio" name="method" value="fixed">
+            <span>Every so many pages<span class="why">For documents with no structure to find.</span></span></label>
+          <div class="sub row-inline">
+            <label for="everyN" style="margin:0">Cut every</label>
+            <input type="number" id="everyN" value="25" min="1" step="1">
+            <span style="font-size:13px;color:var(--ink-2)">pages</span>
+          </div>
+        </div>
+
+        <div class="method" data-method="manual">
+          <label><input type="radio" name="method" value="manual">
+            <span>Type the starting pages<span class="why">One chapter per line: the page it starts on, then its title.</span></span></label>
+          <div class="sub">
+            <label for="manualBox">For example: <code>1 Front matter</code></label>
+            <textarea id="manualBox" spellcheck="false" placeholder="1 Front matter&#10;13 The Lie of the Land&#10;48 A Digression"></textarea>
+          </div>
+        </div>
+      </fieldset>
+
+      <div class="go">
+        <button class="btn primary" id="findBtn" type="button">Find chapters</button>
+      </div>
+      <p class="status" id="status" role="status" aria-live="polite"></p>
+      <div class="meter" id="meter" hidden><i id="meterBar"></i></div>
+    </div>
+
+    <div class="panel">
+      <div class="listhead">
+        <h2>Chapters</h2>
+        <span class="n" id="count"></span>
+      </div>
+      <ol class="rows" id="rows"></ol>
+      <div class="empty" id="listEmpty">No chapters yet. Pick a method and press Find chapters.</div>
+      <div class="listfoot">
+        <button class="btn small" id="addBtn" type="button">Add a split</button>
+        <label class="numopt"><input type="checkbox" id="numberFiles"> Number the files so they stay in order</label>
+        <button class="btn primary" id="splitBtn" type="button" disabled>Split and download</button>
+      </div>
+      <div class="results" id="results" hidden>
+        <h3 id="resultsTitle"></h3>
+        <ul class="files" id="files"></ul>
+        <button class="btn primary" id="zipBtn" type="button">Download all as a .zip</button>
+      </div>
+    </div>
+
+  </section>
+
+  <div class="colophon">
+    <p>Titles and page numbers here are editable, so fix anything the search got wrong before you split. A chapter runs from its starting page up to the page before the next one begins.</p>
+    <p>Outputs keep the original page content exactly, including scans and images. Bookmarks, links between chapters, and form fields don't survive the cut.</p>
+  </div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  var WORKER = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = WORKER;
+
+  // Browsers block background workers on some setups (opening this file straight
+  // from disk, for one). Fall back to doing the same work on the main thread.
+  var fallbackLoaded = null;
+  function loadWorkerOnMainThread() {
+    if (fallbackLoaded) return fallbackLoaded;
+    fallbackLoaded = new Promise(function (resolve, reject) {
+      if (window.pdfjsWorker) return resolve();
+      var s = document.createElement("script");
+      s.src = WORKER;
+      s.onload = function () {
+        window.pdfjsWorker ? resolve() : reject(new Error("worker script loaded but was empty"));
+      };
+      s.onerror = function () { reject(new Error("couldn't reach the PDF library")); };
+      document.head.appendChild(s);
+    });
+    return fallbackLoaded;
+  }
+
+  function openDocument(bytes) {
+    // Always hand pdf.js its own copy; it takes ownership of the buffer.
+    return pdfjsLib.getDocument({ data: bytes.slice(0) }).promise.catch(function (err) {
+      var msg = (err && err.message) || "";
+      if (!/worker/i.test(msg)) throw err;
+      return loadWorkerOnMainThread().then(function () {
+        return pdfjsLib.getDocument({ data: bytes.slice(0) }).promise;
+      });
+    });
+  }
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  var state = {
+    name: "", bytes: null, doc: null, pages: 0,
+    splits: [],          // [{title, start}] start is 1-based
+    urls: [], results: []
+  };
+
+  /* ---------------- loading ---------------- */
+
+  // A file dropped anywhere outside the drop zone would otherwise make the
+  // browser navigate away to the PDF and lose the page.
+  ["dragover", "drop"].forEach(function (t) {
+    window.addEventListener(t, function (e) { e.preventDefault(); });
+  });
+
+  var dz = $("dropzone");
+  $("pickBtn").addEventListener("click", function () { $("fileInput").click(); });
+  $("fileInput").addEventListener("change", function (e) {
+    if (e.target.files && e.target.files[0]) load(e.target.files[0]);
+  });
+  ["dragenter", "dragover"].forEach(function (t) {
+    dz.addEventListener(t, function (e) { e.preventDefault(); dz.classList.add("over"); });
+  });
+  dz.addEventListener("dragleave", function (e) {
+    e.preventDefault();
+    // Moving over a child element fires dragleave too; ignore those.
+    if (e.relatedTarget && dz.contains(e.relatedTarget)) return;
+    dz.classList.remove("over");
+  });
+  dz.addEventListener("drop", function (e) {
+    e.preventDefault();
+    dz.classList.remove("over");
+    var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) load(f);
+  });
+  $("resetBtn").addEventListener("click", function () { location.reload(); });
+
+  function humanSize(n) {
+    if (n < 1024) return n + " B";
+    if (n < 1048576) return (n / 1024).toFixed(0) + " KB";
+    if (n < 1073741824) return (n / 1048576).toFixed(1) + " MB";
+    return (n / 1073741824).toFixed(2) + " GB";
+  }
+
+  function load(file) {
+    if (!/\.pdf$/i.test(file.name) && file.type !== "application/pdf") {
+      $("loadNote").textContent = "That isn't a PDF. Try a file ending in .pdf.";
+      return;
+    }
+    if (!window.pdfjsLib || !window.PDFLib) {
+      $("loadNote").textContent = "The PDF libraries didn't load. Check your connection and reload the page.";
+      return;
+    }
+    $("loadNote").textContent = "Opening " + file.name + "…";
+
+    var bytes;
+    file.arrayBuffer().then(function (buf) {
+      bytes = new Uint8Array(buf);
+      return openDocument(bytes);
+    }).then(function (doc) {
+      state.name = file.name;
+      state.bytes = bytes;
+      state.doc = doc;
+      state.pages = doc.numPages;
+      $("docName").textContent = state.name;
+      $("docMeta").textContent = state.pages.toLocaleString() + " pages · " + humanSize(file.size);
+      $("dropzone").hidden = true;
+      $("loaded").hidden = false;
+      $("work").hidden = false;
+      $("everyN").max = String(state.pages);
+      drawSpine();
+      // A broken outline shouldn't count as a failure to open the file.
+      return doc.getOutline().catch(function () { return null; });
+    }).then(function (outline) {
+      if (!state.doc) return;
+      var n = outline ? outline.length : 0;
+      $("outlineWhy").textContent = n
+        ? "This file has " + n + " top-level bookmarks. Usually the cleanest cut."
+        : "This file has no bookmarks. Try one of the other methods.";
+      if (!n) {
+        document.querySelector('input[value="text"]').checked = true;
+        syncMethods();
+      }
+    }).catch(function (err) {
+      console.error(err);
+      var msg = (err && err.message) || "unknown error";
+      var tail = /password/i.test(msg) ? " Remove the password from the file first."
+               : /worker|library|reach/i.test(msg) ? " The PDF engine couldn't start. Check your internet connection and reload the page."
+               : " The file may be damaged.";
+      $("loadNote").textContent = "Couldn't open that file: " + msg + "." + tail;
+    });
+  }
+
+  /* ---------------- spine drawing ---------------- */
+
+  function drawSpine(animate) {
+    var spine = $("spine"), axis = $("axis");
+    spine.innerHTML = "";
+    axis.innerHTML = "";
+    // Without this, every redraw (each keystroke in a title box) replays the
+    // drop-in animation on all the cut marks.
+    if (!animate) spine.classList.remove("drawing");
+    if (!state.pages) return;
+
+    var pct = function (p) { return ((p - 1) / state.pages) * 100; };
+    var s = state.splits.slice().sort(function (a, b) { return a.start - b.start; });
+
+    if (s.length && s[0].start > 1) {
+      var orphan = document.createElement("div");
+      orphan.className = "seg orphan";
+      orphan.style.left = "0%";
+      orphan.style.width = pct(s[0].start) + "%";
+      orphan.title = "Pages 1–" + (s[0].start - 1) + " · not in any chapter";
+      spine.appendChild(orphan);
+    }
+
+    s.forEach(function (sp, i) {
+      var end = (i + 1 < s.length) ? s[i + 1].start - 1 : state.pages;
+      if (end < sp.start) return;   // two splits on the same page: nothing to draw
+      var seg = document.createElement("div");
+      seg.className = "seg " + (i % 2 ? "even" : "odd");
+      seg.dataset.i = String(i);
+      seg.style.left = pct(sp.start) + "%";
+      seg.style.width = ((end - sp.start + 1) / state.pages) * 100 + "%";
+      seg.title = (sp.title || "Untitled") + " · pages " + sp.start + "–" + end;
+      spine.appendChild(seg);
+    });
+
+    s.forEach(function (sp, i) {
+      if (sp.start <= 1) return;
+      var c = document.createElement("div");
+      c.className = "cut";
+      c.style.left = pct(sp.start) + "%";
+      c.style.setProperty("--d", Math.min(i * 35, 900) + "ms");
+      spine.appendChild(c);
+    });
+
+    if (animate) {
+      spine.classList.remove("drawing");
+      void spine.offsetWidth;
+      spine.classList.add("drawing");
+    }
+
+    // axis ticks: whole page numbers only, and none crowding the first or last label
+    var raw = state.pages / 8;
+    var mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    var step = [1, 2, 5, 10].map(function (m) { return m * mag; })
+      .find(function (v) { return v >= raw; }) || mag * 10;
+    step = Math.max(1, Math.round(step));
+
+    function addTick(p, cls) {
+      var t = document.createElement("span");
+      t.className = "tick" + (cls ? " " + cls : "");
+      t.style.left = cls === "last" ? "100%" : pct(p) + "%";
+      t.textContent = String(p);
+      axis.appendChild(t);
+    }
+    addTick(1, "first");
+    for (var p = step; p < state.pages; p += step) {
+      if (p - 1 < step * 0.5) continue;
+      if (state.pages - p < step * 0.4) continue;
+      addTick(p);
+    }
+    if (state.pages > 1) addTick(state.pages, "last");
+
+    var note = $("orphanNote");
+    if (s.length && s[0].start > 1) {
+      note.hidden = false;
+      note.innerHTML = "";
+      note.appendChild(document.createTextNode(
+        "Pages 1–" + (s[0].start - 1) + " come before the first chapter and won't be saved. "));
+      var b = document.createElement("button");
+      b.className = "linkish";
+      b.type = "button";
+      b.textContent = "Keep them as front matter";
+      b.addEventListener("click", function () {
+        state.splits.push({ title: "Front matter", start: 1 });
+        refresh();
+      });
+      note.appendChild(b);
+    } else {
+      note.hidden = true;
+    }
+  }
+
+  /* ---------------- chapter list ---------------- */
+
+  function sortSplits() {
+    state.splits.sort(function (a, b) { return a.start - b.start; });
+  }
+
+  function endOf(i) {
+    return (i + 1 < state.splits.length) ? state.splits[i + 1].start - 1 : state.pages;
+  }
+
+  function refresh(animate) {
+    sortSplits();
+    drawSpine(animate);
+    renderRows();
+    $("splitBtn").disabled = state.splits.length === 0;
+    $("count").textContent = state.splits.length
+      ? state.splits.length + (state.splits.length === 1 ? " chapter" : " chapters")
+      : "";
+    $("listEmpty").hidden = state.splits.length > 0;
+  }
+
+  function renderRows() {
+    var ol = $("rows");
+    ol.innerHTML = "";
+    var empties = 0;
+    state.splits.forEach(function (sp, i) {
+      var end = endOf(i);
+      var li = document.createElement("li");
+      var isEmpty = end < sp.start;
+      if (isEmpty) { li.className = "empty-ch"; empties++; }
+
+      var idx = document.createElement("span");
+      idx.className = "idx";
+      idx.textContent = String(i + 1);
+
+      var title = document.createElement("input");
+      title.type = "text";
+      title.value = sp.title || "";
+      title.placeholder = "Untitled chapter";
+      title.setAttribute("aria-label", "Title of chapter " + (i + 1));
+      title.addEventListener("input", function () { sp.title = title.value; drawSpine(); });
+
+      var pages = document.createElement("span");
+      pages.className = "pages";
+      var num = document.createElement("input");
+      num.type = "number";
+      num.min = "1";
+      num.max = String(state.pages);
+      num.value = String(sp.start);
+      num.setAttribute("aria-label", "Starting page of chapter " + (i + 1));
+      num.addEventListener("change", function () {
+        var v = Math.max(1, Math.min(state.pages, parseInt(num.value, 10) || 1));
+        sp.start = v;
+        refresh();
+      });
+      pages.appendChild(num);
+      var tail = document.createElement("span");
+      tail.textContent = isEmpty ? "same page" : "– " + end;
+      if (isEmpty) pages.title = "Another chapter starts on this page too, so this one has no pages and will be skipped.";
+      pages.appendChild(tail);
+
+      var kill = document.createElement("button");
+      kill.className = "kill";
+      kill.type = "button";
+      kill.innerHTML = "&times;";
+      kill.title = "Remove this split (its pages join the chapter above)";
+      kill.setAttribute("aria-label", "Remove chapter " + (i + 1));
+      kill.addEventListener("click", function () {
+        state.splits.splice(i, 1);
+        refresh();
+      });
+
+      li.appendChild(idx);
+      li.appendChild(title);
+      li.appendChild(pages);
+      li.appendChild(kill);
+
+      li.addEventListener("mouseenter", function () {
+        var seg = $("spine").querySelector('.seg[data-i="' + i + '"]');
+        if (seg) seg.classList.add("hot");
+      });
+      li.addEventListener("mouseleave", function () {
+        var seg = $("spine").querySelector('.seg[data-i="' + i + '"]');
+        if (seg) seg.classList.remove("hot");
+      });
+
+      ol.appendChild(li);
+    });
+    if (empties) {
+      say(empties === 1
+        ? "One chapter shares its starting page with another and will be skipped. Change its page or remove it."
+        : empties + " chapters share a starting page with another and will be skipped. Change their pages or remove them.", true);
+    }
+  }
+
+  // Adds a new split halfway through the longest chapter. (The old version put
+  // it one page after the last split, which made a one-page chapter or, when the
+  // last chapter started on the final page, a duplicate.)
+  $("addBtn").addEventListener("click", function () {
+    if (!state.pages) return;
+    sortSplits();
+    var sp;
+    if (!state.splits.length) {
+      sp = { title: "Untitled chapter", start: 1 };
+    } else {
+      var best = -1, bestLen = 0;
+      state.splits.forEach(function (s, i) {
+        var len = endOf(i) - s.start + 1;
+        if (len > bestLen) { bestLen = len; best = i; }
+      });
+      if (bestLen < 2) { say("Every chapter is already a single page.", true); return; }
+      sp = { title: "Untitled chapter", start: state.splits[best].start + Math.floor(bestLen / 2) };
+    }
+    state.splits.push(sp);
+    refresh();
+    var at = state.splits.indexOf(sp);
+    var inputs = $("rows").querySelectorAll('input[type="text"]');
+    if (inputs[at]) { inputs[at].focus(); inputs[at].select(); }
+  });
+
+  /* ---------------- method switching ---------------- */
+
+  function syncMethods() {
+    Array.prototype.forEach.call(document.querySelectorAll(".method"), function (m) {
+      var r = m.querySelector("input[type=radio]");
+      m.classList.toggle("on", r.checked);
+    });
+  }
+  $("methods").addEventListener("change", syncMethods);
+  syncMethods();
+
+  function say(msg, bad) {
+    var s = $("status");
+    s.textContent = msg || "";
+    s.classList.toggle("bad", !!bad);
+  }
+  function meter(frac) {
+    var m = $("meter");
+    if (frac === null) { m.hidden = true; return; }
+    m.hidden = false;
+    $("meterBar").style.width = Math.round(frac * 100) + "%";
+  }
+  var idle = function () { return new Promise(function (r) { setTimeout(r, 0); }); };
+
+  /* ---------------- finders ---------------- */
+
+  $("findBtn").addEventListener("click", function () {
+    var method = document.querySelector('input[name="method"]:checked').value;
+    var btn = $("findBtn");
+    btn.disabled = true;
+    say("");
+    // Anything thrown while starting a job (a bad heading pattern, say) used to
+    // escape the promise chain and leave the button disabled for good.
+    var job;
+    try {
+      job = method === "outline" ? fromOutline()
+          : method === "text"    ? fromText()
+          : method === "fixed"   ? Promise.resolve(fromFixed())
+          :                        Promise.resolve(fromManual());
+    } catch (err) {
+      job = Promise.reject(err);
+    }
+
+    job.then(function (found) {
+      meter(null);
+      btn.disabled = false;
+      if (!found || !found.length) {
+        say("Nothing found with that method. Try another one, or add splits by hand.", true);
+        return;
+      }
+      state.splits = found;
+      refresh(true);
+      say("Found " + found.length + (found.length === 1 ? " chapter." : " chapters.") +
+          " Check the page numbers before you split.");
+    }).catch(function (err) {
+      console.error(err);
+      meter(null);
+      btn.disabled = false;
+      say("That didn't work: " + (err && err.message ? err.message : "unknown error"), true);
+    });
+  });
+
+  function tidy(list) {
+    var seen = {}, out = [];
+    list.sort(function (a, b) { return a.start - b.start; });
+    list.forEach(function (x) {
+      if (x.start < 1 || x.start > state.pages) return;
+      if (seen[x.start]) return;
+      seen[x.start] = 1;
+      out.push({ title: (x.title || "").trim() || "Untitled chapter", start: x.start });
+    });
+    return out;
+  }
+
+  function destToPage(dest) {
+    if (!dest) return Promise.resolve(null);
+    var d = Promise.resolve(dest);
+    if (typeof dest === "string") d = state.doc.getDestination(dest);
+    return d.then(function (arr) {
+      if (!Array.isArray(arr) || !arr.length) return null;
+      var ref = arr[0];
+      if (typeof ref === "number") return ref + 1;
+      return state.doc.getPageIndex(ref).then(function (i) { return i + 1; });
+    }).catch(function () { return null; });
+  }
+
+  function fromOutline() {
+    var maxDepth = parseInt($("depthSel").value, 10);
+    return state.doc.getOutline().then(function (outline) {
+      if (!outline || !outline.length) return [];
+      var flat = [];
+      (function walk(items, depth) {
+        items.forEach(function (it) {
+          if (depth <= maxDepth) flat.push(it);
+          if (it.items && it.items.length) walk(it.items, depth + 1);
+        });
+      })(outline, 1);
+
+      say("Reading " + flat.length + " bookmarks…");
+      return flat.reduce(function (chain, it) {
+        return chain.then(function (acc) {
+          return destToPage(it.dest).then(function (p) {
+            if (p) acc.push({ title: it.title, start: p });
+            return acc;
+          });
+        });
+      }, Promise.resolve([])).then(tidy);
+    });
+  }
+
+  // Words that, right after "Part", "Chapter", etc., mean it's ordinary prose
+  // ("Part of the reason…") or an in-chapter heading ("Chapter Summary"),
+  // not a chapter opening.
+  // ("a" is left out on purpose: the match ignores case, so it would block "Appendix A".)
+  var NOT_A_HEADING = "of|the|an|and|in|is|was|that|with|for|on|by|as|at|it|from|this|which|" +
+                      "summary|review|objectives|outline|questions|highlights|overview|preview|" +
+                      "quiz|exercises|resources|references|notes";
+
+  function buildPattern() {
+    var raw = $("patternInput").value.trim();
+    if (!raw) raw = "chapter";
+    var looksLikeRegex = /[\\\[\](){}^$*+?]/.test(raw);
+    var body = looksLikeRegex ? raw
+      : "(?:" + raw + ")\\b(?!\\s+(?:" + NOT_A_HEADING + ")\\b)";
+    try {
+      return new RegExp("^\\W{0,3}" + body, "i");
+    } catch (e) {
+      throw new Error("the heading pattern isn't valid (" + e.message + ")");
+    }
+  }
+
+  // Returns the first few text lines in the top 40% of the page, top to bottom.
+  // Positions go through the viewport so rotated pages and pages whose
+  // coordinates don't start at zero are measured correctly.
+  function topLines(page) {
+    var vp = page.getViewport({ scale: 1 });
+    return page.getTextContent().then(function (tc) {
+      var limit = vp.height * 0.40;
+      var buckets = {};
+      tc.items.forEach(function (it) {
+        if (!it.str || !it.str.trim()) return;
+        var pt = vp.convertToViewportPoint(it.transform[4], it.transform[5]);
+        if (pt[1] > limit) return;
+        var key = Math.round(pt[1] / 3);
+        (buckets[key] = buckets[key] || []).push({ x: pt[0], s: it.str });
+      });
+      page.cleanup();
+      return Object.keys(buckets)
+        .map(Number)
+        .sort(function (a, b) { return a - b; })
+        .slice(0, 6)
+        .map(function (k) {
+          return buckets[k]
+            .sort(function (a, b) { return a.x - b.x; })
+            .map(function (o) { return o.s; })
+            .join(" ")
+            .replace(/\s+/g, " ")
+            .trim();
+        })
+        .filter(function (l) { return l.length > 0; });
+    });
+  }
+
+  function fromText() {
+    var re = buildPattern();
+    var found = [];
+    var seen = {};
+    var total = state.pages;
+    var chain = Promise.resolve();
+    var key = function (t) {
+      return t.toLowerCase().replace(/\s*\d+\s*$/, "").replace(/\s+/g, " ").trim();
+    };
+
+    for (var i = 1; i <= total; i++) {
+      (function (n) {
+        chain = chain.then(function () {
+          return state.doc.getPage(n).then(topLines).then(function (lines) {
+            for (var j = 0; j < lines.length; j++) {
+              if (lines[j].length > 90 || !re.test(lines[j])) continue;
+              // Running heads repeat the chapter name on every page; only the
+              // first appearance is the chapter opening.
+              var k = key(lines[j]);
+              if (seen[k]) break;
+              seen[k] = 1;
+              var title = lines[j];
+              // A bare "Chapter 4" usually has its real title on the next line.
+              if (title.length < 24 && lines[j + 1] && lines[j + 1].length < 90) {
+                title += ": " + lines[j + 1];
+              }
+              found.push({ title: title, start: n });
+              break;
+            }
+          }).catch(function () { /* skip unreadable page */ });
+        });
+        if (n % 5 === 0) {
+          chain = chain.then(function () {
+            meter(n / total);
+            say("Reading page " + n + " of " + total + "… " + found.length + " found so far.");
+            return idle();
+          });
+        }
+      })(i);
+    }
+    return chain.then(function () { return tidy(found); });
+  }
+
+  function fromFixed() {
+    var n = Math.max(1, parseInt($("everyN").value, 10) || 25);
+    var out = [];
+    for (var p = 1; p <= state.pages; p += n) {
+      var end = Math.min(state.pages, p + n - 1);
+      out.push({ title: "Pages " + p + " to " + end, start: p });
+    }
+    return tidy(out);
+  }
+
+  function fromManual() {
+    var lines = $("manualBox").value.split("\n");
+    var out = [];
+    lines.forEach(function (line) {
+      var t = line.trim();
+      if (!t) return;
+      var m = t.match(/^(\d+)\s*(?:[-–—]\s*\d+)?[\s.:,)]*(.*)$/);
+      if (!m) return;
+      out.push({ title: m[2] || "Pages from " + m[1], start: parseInt(m[1], 10) });
+    });
+    return tidy(out);
+  }
+
+  /* ---------------- splitting ---------------- */
+
+  function safeName(s) {
+    return (s || "Untitled")
+      .replace(/[\\/:*?"<>|\u0000-\u001f]/g, "-")
+      .replace(/\s+/g, " ")
+      .replace(/^[.\s]+|[.\s]+$/g, "")
+      .slice(0, 80) || "Untitled";
+  }
+
+  $("splitBtn").addEventListener("click", function () {
+    var btn = $("splitBtn");
+    btn.disabled = true;
+    $("results").hidden = true;
+    state.urls.forEach(function (u) { URL.revokeObjectURL(u); });
+    state.urls = [];
+    state.results = [];
+
+    sortSplits();
+    var plan = state.splits.map(function (sp, i) {
+      return { title: sp.title, start: sp.start, end: endOf(i) };
+    }).filter(function (c) { return c.end >= c.start; });
+
+    var pad = String(plan.length).length;
+    var numbered = $("numberFiles").checked;
+    var used = Object.create(null);
+    function fileNameFor(chapter, i) {
+      var base = safeName(chapter.title);
+      if (numbered) base = String(i + 1).padStart(pad, "0") + " " + base;
+      var name = base;
+      for (var n = 2; used[name.toLowerCase()]; n++) name = base + " (" + n + ")";
+      used[name.toLowerCase()] = 1;
+      return name + ".pdf";
+    }
+    say("Opening the document for writing…");
+    meter(0);
+
+    PDFLib.PDFDocument.load(state.bytes, { ignoreEncryption: true, updateMetadata: false })
+      .then(function (src) {
+        // pdf-lib can't decrypt. Copying pages out of an encrypted (copy-protected)
+        // PDF produces files that open blank or garbled, so stop and say why.
+        if (src.isEncrypted) {
+          var e = new Error("this PDF is copy-protected (encrypted)");
+          e.encrypted = true;
+          throw e;
+        }
+        return plan.reduce(function (chain, c, i) {
+          return chain.then(function () {
+            var idxs = [];
+            for (var p = c.start; p <= c.end; p++) idxs.push(p - 1);
+            return PDFLib.PDFDocument.create().then(function (out) {
+              return out.copyPages(src, idxs).then(function (pgs) {
+                pgs.forEach(function (pg) { out.addPage(pg); });
+                out.setTitle(c.title || "Untitled");
+                return out.save({ useObjectStreams: false });
+              });
+            }).then(function (bytes) {
+              var blob = new Blob([bytes], { type: "application/pdf" });
+              var url = URL.createObjectURL(blob);
+              state.urls.push(url);
+              state.results.push({
+                name: fileNameFor(c, i),
+                url: url, blob: blob, size: blob.size
+              });
+              meter((i + 1) / plan.length);
+              say("Written " + (i + 1) + " of " + plan.length + "…");
+              return idle();
+            });
+          });
+        }, Promise.resolve());
+      })
+      .then(function () {
+        meter(null);
+        btn.disabled = false;
+        showResults();
+        say("Done. " + state.results.length + " files ready.");
+      })
+      .catch(function (err) {
+        console.error(err);
+        meter(null);
+        btn.disabled = false;
+        if (err && err.encrypted) {
+          say("Can't split: " + err.message + ". The browser can read it but can't write clean copies of its pages. " +
+              "Save an unprotected copy first (printing it to a new PDF usually works), then split that file.", true);
+          return;
+        }
+        say("Splitting failed: " + (err && err.message ? err.message : "unknown error") +
+            ". Very large files can run the browser out of memory, so try fewer chapters at a time.", true);
+      });
+  });
+
+  function showResults() {
+    var box = $("results"), list = $("files");
+    list.innerHTML = "";
+    var total = 0;
+    state.results.forEach(function (r) {
+      total += r.size;
+      var li = document.createElement("li");
+      var n = document.createElement("span");
+      n.className = "fname";
+      n.textContent = r.name;
+      var s = document.createElement("span");
+      s.className = "fsize";
+      s.textContent = humanSize(r.size);
+      var a = document.createElement("a");
+      a.href = r.url;
+      a.download = r.name;
+      a.textContent = "Download";
+      li.appendChild(n); li.appendChild(s); li.appendChild(a);
+      list.appendChild(li);
+    });
+    $("resultsTitle").textContent = state.results.length + " files · " + humanSize(total);
+    box.hidden = false;
+    box.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  $("zipBtn").addEventListener("click", function () {
+    if (!window.JSZip) { say("The zip library didn't load. Download the files one at a time.", true); return; }
+    var btn = $("zipBtn");
+    btn.disabled = true;
+    var zip = new JSZip();
+    var folder = zip.folder(safeName(state.name.replace(/\.pdf$/i, "")));
+    state.results.forEach(function (r) { folder.file(r.name, r.blob); });
+    say("Building the zip…");
+    zip.generateAsync({ type: "blob", compression: "STORE" }, function (m) {
+      meter(m.percent / 100);
+    }).then(function (blob) {
+      meter(null);
+      btn.disabled = false;
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = safeName(state.name.replace(/\.pdf$/i, "")) + " - chapters.zip";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 30000);
+      say("Zip downloaded.");
+    }).catch(function (err) {
+      meter(null);
+      btn.disabled = false;
+      say("Couldn't build the zip: " + (err && err.message ? err.message : "unknown error") +
+          ". Download the files individually instead.", true);
+    });
+  });
+
+})();
+</script>
+</body>
+</html>
